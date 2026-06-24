@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NFTradex Core</title>
+    <title>NFTradex - Debug Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 </head>
 <body class="bg-gray-950 text-white p-4">
     <div id="app" class="max-w-md mx-auto">
-        <h1 class="text-2xl font-bold text-center mb-6">NFTradex</h1>
+        <h1 class="text-xl font-black text-center mb-4">NFTradex Core</h1>
+        <div id="status" class="bg-blue-900 p-2 text-[10px] rounded mb-4 text-center">Status: Initializing...</div>
         <div id="content" class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
             <button onclick="init()" class="w-full bg-blue-600 p-4 rounded-xl font-bold">Connect Wallet</button>
         </div>
@@ -16,66 +17,37 @@
 
 <script>
     const ADDR = "0xa1e4A5d66fc0326C16CD54C2348d5fAEBeBa049a";
-    const ABI = ["function register(address) external", "function buyNFT() external", "function claimExpiredNFT(uint256) external", "function users(address) view returns (bool, address, uint256, uint256, uint256, uint256, uint256)", "function nfts(uint256) view returns (uint256, address, uint256, uint256, bool, bool, bool)", "function getMarketQueue() view returns (uint256[])", "function adminMintBaseNFTs(uint256) external", "function owner() view returns (address)"];
-    let signer, contract, wallet;
+    const ABI = ["function getMarketQueue() view returns (uint256[])", "function nfts(uint256) view returns (uint256, address, uint256, uint256, bool, bool, bool)"];
+    
+    function log(msg) { document.getElementById('status').innerText = msg; }
 
     async function init() {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        signer = await provider.getSigner();
-        contract = new ethers.Contract(ADDR, ABI, signer);
-        wallet = await signer.getAddress();
-        const user = await contract.users(wallet);
-        if(!user[0]) renderSignup(); else renderDashboard();
-    }
-
-    function renderSignup() {
-        document.getElementById('content').innerHTML = `
-            <input id="upline" placeholder="Sponsor Address" class="w-full p-3 rounded bg-black mb-3 text-white border border-gray-700"/>
-            <button onclick="register()" class="w-full bg-green-600 p-3 rounded font-bold">Pay 1 USDT & Signup</button>
-        `;
-    }
-
-    async function register() {
-        const upline = document.getElementById('upline').value;
-        alert("Please approve 1 USDT in MetaMask...");
-        await contract.register(upline);
-        location.reload();
-    }
-
-    async function renderDashboard() {
-        document.getElementById('content').innerHTML = `
-            <div class="flex gap-2 mb-4">
-                <button onclick="loadMarket()" class="bg-blue-600 px-3 py-1 rounded text-xs">Market</button>
-                <button onclick="loadHistory()" class="bg-gray-800 px-3 py-1 rounded text-xs">History</button>
-                <button onclick="renderAdmin()" class="bg-red-900 px-3 py-1 rounded text-xs">Admin</button>
-            </div>
-            <div id="dashboard-body">Loading...</div>
-        `;
-        loadMarket();
-    }
-
-    async function loadMarket() {
-        const queue = await contract.getMarketQueue();
-        let html = '<h2 class="font-bold mb-3">Market</h2>';
-        for(let id of queue) {
-            const n = await contract.nfts(id);
-            html += `<div class="bg-black p-3 rounded mb-2 flex justify-between">NFT #${n[0]} <button onclick="buy(${n[0]})" class="bg-yellow-600 px-2 py-1 rounded text-xs">Buy</button></div>`;
+        try {
+            log("Connecting to MetaMask...");
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(ADDR, ABI, signer);
+            log("Fetching Market...");
+            
+            const queue = await contract.getMarketQueue();
+            let html = '<h2 class="font-bold mb-3">Market Assets</h2>';
+            
+            if(queue.length === 0) html += "<p class='text-xs'>Market is empty.</p>";
+            
+            for(let id of queue) {
+                const n = await contract.nfts(id);
+                html += `<div class="bg-black p-3 rounded mb-2 flex justify-between items-center">
+                    <span>NFT #${n[0].toString()}</span>
+                    <span class="text-xs text-yellow-400">${ethers.formatEther(n[2])} USDT</span>
+                </div>`;
+            }
+            document.getElementById('content').innerHTML = html;
+            log("Market Loaded Successfully!");
+        } catch(e) {
+            log("ERROR: " + e.message);
+            console.error(e);
         }
-        document.getElementById('dashboard-body').innerHTML = html;
     }
-
-    async function loadHistory() {
-        document.getElementById('dashboard-body').innerHTML = "History: Coming Soon (NFTs list here)";
-    }
-
-    async function renderAdmin() {
-        document.getElementById('dashboard-body').innerHTML = `
-            <button onclick="mint()" class="w-full bg-red-600 p-3 rounded mb-2">Mint 5 NFTs</button>
-        `;
-    }
-
-    async function buy(id) { await contract.buyNFT(); alert("Success!"); }
-    async function mint() { await contract.adminMintBaseNFTs(5); alert("Minted!"); }
 </script>
 </body>
 </html>
