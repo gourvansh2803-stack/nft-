@@ -2,52 +2,88 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NFTradex - Debug Mode</title>
+    <title>NFTradex - Professional DApp</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 </head>
-<body class="bg-gray-950 text-white p-4">
+<body class="bg-gray-950 text-white font-sans p-4">
     <div id="app" class="max-w-md mx-auto">
-        <h1 class="text-xl font-black text-center mb-4">NFTradex Core</h1>
-        <div id="status" class="bg-blue-900 p-2 text-[10px] rounded mb-4 text-center">Status: Initializing...</div>
-        <div id="content" class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+        <h1 class="text-2xl font-black text-center mb-6">NFTradex Core</h1>
+        <div id="content" class="bg-gray-900 p-6 rounded-3xl border border-gray-800">
             <button onclick="init()" class="w-full bg-blue-600 p-4 rounded-xl font-bold">Connect Wallet</button>
         </div>
     </div>
 
 <script>
     const ADDR = "0xa1e4A5d66fc0326C16CD54C2348d5fAEBeBa049a";
-    const ABI = ["function getMarketQueue() view returns (uint256[])", "function nfts(uint256) view returns (uint256, address, uint256, uint256, bool, bool, bool)"];
+    const USDT = "0x9e5aac1ba1a2e6aed6b32689dfcf62a509ca96f3";
+    const ABI = ["function register(address) external", "function buyNFT() external", "function users(address) view returns (bool, address, uint256, uint256, uint256, uint256, uint256)", "function nfts(uint256) view returns (uint256, address, uint256, uint256, bool, bool, bool)", "function getMarketQueue() view returns (uint256[])", "function adminMintBaseNFTs(uint256) external", "function owner() view returns (address)"];
+    const USDT_ABI = ["function approve(address, uint256) external returns (bool)"];
     
-    function log(msg) { document.getElementById('status').innerText = msg; }
+    let signer, contract, wallet;
 
     async function init() {
         try {
-            log("Connecting to MetaMask...");
             const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(ADDR, ABI, signer);
-            log("Fetching Market...");
-            
-            const queue = await contract.getMarketQueue();
-            let html = '<h2 class="font-bold mb-3">Market Assets</h2>';
-            
-            if(queue.length === 0) html += "<p class='text-xs'>Market is empty.</p>";
-            
-            for(let id of queue) {
-                const n = await contract.nfts(id);
-                html += `<div class="bg-black p-3 rounded mb-2 flex justify-between items-center">
-                    <span>NFT #${n[0].toString()}</span>
-                    <span class="text-xs text-yellow-400">${ethers.formatEther(n[2])} USDT</span>
-                </div>`;
-            }
-            document.getElementById('content').innerHTML = html;
-            log("Market Loaded Successfully!");
-        } catch(e) {
-            log("ERROR: " + e.message);
-            console.error(e);
-        }
+            signer = await provider.getSigner();
+            contract = new ethers.Contract(ADDR, ABI, signer);
+            wallet = await signer.getAddress();
+            const user = await contract.users(wallet);
+            if(!user[0]) renderSignup(); else renderDashboard();
+        } catch(e) { alert("Connect Error: " + e.message); }
     }
+
+    function renderSignup() {
+        document.getElementById('content').innerHTML = `
+            <h2 class="font-bold mb-4">Signup</h2>
+            <input id="upline" placeholder="Sponsor Address" class="w-full p-3 rounded bg-black mb-3 border border-gray-700"/>
+            <button onclick="register()" class="w-full bg-green-600 p-3 rounded font-bold">Pay 1 USDT & Signup</button>
+        `;
+    }
+
+    async function register() {
+        const upline = document.getElementById('upline').value;
+        const usdt = new ethers.Contract(USDT, USDT_ABI, signer);
+        await (await usdt.approve(ADDR, ethers.parseEther("1"))).wait();
+        await (await contract.register(upline)).wait();
+        location.reload();
+    }
+
+    function renderDashboard() {
+        document.getElementById('content').innerHTML = `
+            <div class="flex gap-2 mb-4 text-xs font-bold">
+                <button onclick="loadMarket()" class="bg-blue-600 px-3 py-1 rounded">Market</button>
+                <button onclick="loadHistory()" class="bg-gray-800 px-3 py-1 rounded">History</button>
+                <button onclick="loadIncome()" class="bg-gray-800 px-3 py-1 rounded">Income</button>
+                <button onclick="renderAdmin()" class="bg-red-900 px-3 py-1 rounded text-red-200">Admin</button>
+            </div>
+            <div id="dash-body"></div>
+        `;
+        loadMarket();
+    }
+
+    async function loadMarket() {
+        const queue = await contract.getMarketQueue();
+        let html = '<h2 class="font-bold mb-3">Market Queue</h2>';
+        for(let id of queue) {
+            const n = await contract.nfts(id);
+            html += `<div class="bg-black p-3 rounded mb-2 flex justify-between items-center text-sm">
+                NFT #${n[0]} <button onclick="buy(${n[0]})" class="bg-yellow-600 px-3 py-1 rounded text-xs text-black font-bold">Buy ${ethers.formatEther(n[2])}</button>
+            </div>`;
+        }
+        document.getElementById('dash-body').innerHTML = html;
+    }
+
+    async function buy(id) { await (await contract.buyNFT()).wait(); alert("Success!"); }
+
+    function loadHistory() { document.getElementById('dash-body').innerHTML = "History: Coming Soon"; }
+    function loadIncome() { document.getElementById('dash-body').innerHTML = "Income: 3% Yield Active"; }
+    function renderAdmin() {
+        document.getElementById('dash-body').innerHTML = `
+            <button onclick="mint()" class="w-full bg-red-600 p-3 rounded mb-2 font-bold">Mint 5 NFTs</button>
+        `;
+    }
+    async function mint() { await (await contract.adminMintBaseNFTs(5)).wait(); alert("Minted!"); }
 </script>
 </body>
 </html>
